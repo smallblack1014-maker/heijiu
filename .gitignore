@@ -1,0 +1,35 @@
+# Flutter
+**/flutter_app/.dart_tool/
+**/flutter_app/.packages
+**/flutter_app/.pub-cache/
+**/flutter_app/.pub/
+**/flutter_app/build/
+**/flutter_app/.flutter-plugins
+**/flutter_app/.flutter-plugins-dependencies
+**/flutter_app/**/*.iml
+**/flutter_app/**/pubspec.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
+*.log
+*.bak
+
+# Web (sqflite_common_ffi_web generates these, but they go in build/)
+**/flutter_app/web/sqflite_sw.js
+**/flutter_app/web/sqlite3.wasm
+
+# Node (from sqflite setup)
+**/flutter_app/node_modules/
+
+# GitHub Pages deployment
+**/flutter_app/build/web/

@@ -1,0 +1,1 @@
+C:\Users\86150\.qclaw\workspace\wine_journal_pro\flutter_app\build\app\intermediates\cxx\RelWithDebInfo\p192q511\obj\x86_64

@@ -1,0 +1,2 @@
+C:/Users/86150/.qclaw/workspace/wine_journal_pro/flutter_app/android/app/.cxx/RelWithDebInfo/2w4a5l59/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/86150/.qclaw/workspace/wine_journal_pro/flutter_app/android/app/.cxx/RelWithDebInfo/2w4a5l59/armeabi-v7a/CMakeFiles/rebuild_cache.dir
