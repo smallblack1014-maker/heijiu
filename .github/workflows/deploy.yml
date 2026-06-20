@@ -51,7 +51,7 @@ jobs:
         run: flutter pub run sqflite_common_ffi_web:setup --force
 
       - name: Build web
-        run: flutter build web --release
+        run: flutter build web --release --base-href /heijiu/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
