@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,13 +21,24 @@ import '../theme/app_theme.dart';
 import '../utils/scoring_helper.dart';
 import '../utils/wine_type_helper.dart';
 import '../utils/image_utils.dart';
-import '../widgets/rating_slider.dart';
+import '../widgets/appearance_section.dart';
+import '../widgets/aroma_section.dart';
+import '../widgets/palate_section.dart';
+import '../widgets/overall_section.dart';
+import '../widgets/flavor_section.dart';
 import '../widgets/flavor_chip.dart';
 
 class TastingFormScreen extends StatefulWidget {
   final String wineType;
+  final int? tastingId;
+  final int? existingWineId;
 
-  const TastingFormScreen({super.key, this.wineType = 'red'});
+  const TastingFormScreen({
+    super.key,
+    this.wineType = 'red',
+    this.tastingId,
+    this.existingWineId,
+  });
 
   @override
   State<TastingFormScreen> createState() => _TastingFormScreenState();
@@ -36,6 +47,10 @@ class TastingFormScreen extends StatefulWidget {
 class _TastingFormScreenState extends State<TastingFormScreen> {
   static const Duration _animDuration = Duration(milliseconds: 300);
   static const Curve _animCurve = Curves.easeInOut;
+
+  /// Edit mode: true when editing an existing tasting record
+  bool get _isEditMode => widget.tastingId != null;
+  int? _editingWineId;
 
   // ─── Wine Info ───
   final _nameController = TextEditingController();
@@ -127,6 +142,108 @@ class _TastingFormScreenState extends State<TastingFormScreen> {
         _availableFlavors = flavors.map((f) => f.name).toList();
         _weightConfig = weightConfig;
       });
+    }
+
+    // If in edit mode, load existing tasting data
+    if (widget.tastingId != null && mounted) {
+      await _loadExistingTasting();
+    }
+  }
+
+  Future<void> _loadExistingTasting() async {
+    final db = DatabaseHelper();
+    try {
+      final tasting = await db.getTasting(widget.tastingId!);
+      if (tasting == null || !mounted) return;
+
+      final wine = await db.getWine(tasting.wineId);
+      if (wine == null || !mounted) return;
+
+      _editingWineId = tasting.wineId;
+
+      // Load sub-scores
+      final appearance = await db.getAppearance(tasting.id!);
+      final aroma = await db.getAroma(tasting.id!);
+      final palate = await db.getPalate(tasting.id!);
+      final overall = await db.getOverall(tasting.id!);
+      final flavorNames = await db.getTastingFlavorNames(tasting.id!);
+      final photoMaps = await db.getTastingPhotos(tasting.id!);
+
+      if (!mounted) return;
+
+      setState(() {
+        // ── Wine Info ──
+        _nameController.text = wine.name;
+        _selectedCountry = wine.country ?? '';
+        _selectedRegion = wine.region ?? '';
+        _selectedVariety = wine.variety ?? '';
+        _selectedVintage = wine.vintage != null ? wine.vintage.toString() : 'NV (无年份)';
+        if (wine.country != null) {
+          _availableRegions = WineRegionData.getRegionsForCountry(wine.country!);
+        }
+        _wineryController.text = wine.winery ?? '';
+        _alcoholController.text = wine.alcohol?.toString() ?? '';
+        _priceController.text = wine.price?.toString() ?? '';
+
+        // ── Dates & Venue ──
+        _drinkingDate = tasting.drinkingDate;
+        _purchaseDate = tasting.purchaseDate;
+        _venueController.text = tasting.venue ?? '';
+
+        // ── Mode ──
+        _scoringMode = tasting.scoringMode;
+        _isBlind = tasting.isBlind == 1;
+
+        // ── Appearance ──
+        _appearanceColor = appearance?.color;
+        _appearanceClarity = appearance?.clarity;
+        _appearanceIntensity = appearance?.intensity;
+        _appearanceCondition = appearance?.condition;
+        _appearanceTears = appearance?.tears;
+        _appearanceBubbleFineness = appearance?.bubbleFineness;
+        _appearanceBubblePersistence = appearance?.bubblePersistence;
+
+        // ── Aroma ──
+        _aromaIntensity = aroma?.intensity.toDouble();
+        _aromaCondition = aroma?.complexity.toDouble();
+        _aromaDevelopment = aroma?.persistence.toDouble();
+
+        // ── Flavors ──
+        _selectedFlavors = flavorNames;
+
+        // ── Palate ──
+        _palateAcidity = palate?.acidity.toDouble();
+        _palateTannin = palate?.tannin.toDouble();
+        _palateBody = palate?.body.toDouble();
+        _palateBalance = palate?.balance.toDouble();
+        _palateComplexity = palate?.complexity.toDouble();
+        _palateFinish = palate?.finishLength.toDouble();
+        _palateTexture = palate?.tanninTexture != null ? null : null;
+        _palateCharacter = palate?.finishCharacter != null ? null : null;
+        _palateAlcohol = palate?.alcoholPerception?.toDouble();
+
+        // ── Overall ──
+        _overallTypicality = overall?.typicality.toDouble();
+        _overallEnjoyment = overall?.enjoyment.toDouble();
+        _overallValue = overall?.value.toDouble();
+        _overallAging = overall?.agingPotential.toDouble();
+        _overallRepurchase = overall?.repurchase.toDouble();
+        _overallAgingAdvice = overall?.agingAdvice;
+
+        // ── Notes ──
+        _notesController.text = tasting.notes ?? '';
+
+        // ── Photos ──
+        _photoFiles = photoMaps
+            .map((m) => ImageUtils.dataUrlToBytes(m['photoPath'] as String))
+            .toList();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载品鉴数据失败: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -265,31 +382,88 @@ class _TastingFormScreenState extends State<TastingFormScreen> {
 
                 // ─── APPEARANCE SCORING ───
                 _buildSectionTitle('外观评分'),
-                _buildAppearanceSection(),
+                AppearanceSection(
+                  wineType: widget.wineType,
+                  color: _appearanceColor,
+                  clarity: _appearanceClarity,
+                  intensity: _appearanceIntensity,
+                  condition: _appearanceCondition,
+                  tears: _appearanceTears,
+                  bubbleFineness: _appearanceBubbleFineness,
+                  bubblePersistence: _appearanceBubblePersistence,
+                  onColorChanged: (v) => setState(() => _appearanceColor = v),
+                  onClarityChanged: (v) => setState(() => _appearanceClarity = v),
+                  onIntensityChanged: (v) => setState(() => _appearanceIntensity = v),
+                  onConditionChanged: (v) => setState(() => _appearanceCondition = v),
+                  onTearsChanged: (v) => setState(() => _appearanceTears = v),
+                  onBubbleFinenessChanged: (v) => setState(() => _appearanceBubbleFineness = v),
+                  onBubblePersistenceChanged: (v) => setState(() => _appearanceBubblePersistence = v),
+                ),
                 const SizedBox(height: 12),
 
                 // ─── AROMA SCORING ───
                 if (_scoringMode != 'quick') ...[
                   _buildSectionTitle('香气评分'),
-                  _buildAromaSection(),
+                  AromaSection(
+                    intensity: _aromaIntensity,
+                    complexity: _aromaCondition,
+                    persistence: _aromaDevelopment,
+                    scoringMode: _scoringMode,
+                    onIntensityChanged: (v) => setState(() => _aromaIntensity = v),
+                    onComplexityChanged: (v) => setState(() => _aromaCondition = v),
+                    onPersistenceChanged: (v) => setState(() => _aromaDevelopment = v),
+                  ),
                   const SizedBox(height: 12),
                 ],
 
                 // ─── FLAVOR WORDS ───
                 if (_scoringMode != 'quick') ...[
                   _buildSectionTitle('风味词（可选）'),
-                  _buildFlavorSection(),
+                  FlavorSection(
+                    wineType: widget.wineType,
+                    selectedFlavors: _selectedFlavors,
+                    onFlavorsChanged: (v) => setState(() => _selectedFlavors = v),
+                  ),
                   const SizedBox(height: 12),
                 ],
 
                 // ─── PALATE SCORING ───
                 _buildSectionTitle('口感评分'),
-                _buildPalateSection(),
+                PalateSection(
+                  acidity: _palateAcidity,
+                  tannin: _palateTannin,
+                  body: _palateBody,
+                  balance: _palateBalance,
+                  complexity: _palateComplexity,
+                  finishLength: _palateFinish,
+                  scoringMode: _scoringMode,
+                  wineType: widget.wineType,
+                  onAcidityChanged: (v) => setState(() => _palateAcidity = v),
+                  onTanninChanged: (v) => setState(() => _palateTannin = v),
+                  onBodyChanged: (v) => setState(() => _palateBody = v),
+                  onBalanceChanged: (v) => setState(() => _palateBalance = v),
+                  onComplexityChanged: (v) => setState(() => _palateComplexity = v),
+                  onFinishLengthChanged: (v) => setState(() => _palateFinish = v),
+                ),
                 const SizedBox(height: 12),
 
                 // ─── OVERALL SCORING ───
                 _buildSectionTitle('综合评分'),
-                _buildOverallSection(),
+                OverallSection(
+                  typicality: _overallTypicality,
+                  enjoyment: _overallEnjoyment,
+                  value: _overallValue,
+                  agingPotential: _overallAging,
+                  repurchase: _overallRepurchase,
+                  agingAdvice: _overallAgingAdvice,
+                  scoringMode: _scoringMode,
+                  onTypicalityChanged: (v) => setState(() => _overallTypicality = v),
+                  onEnjoymentChanged: (v) => setState(() => _overallEnjoyment = v),
+                  onValueChanged: (v) => setState(() => _overallValue = v),
+                  onAgingChanged: (v) => setState(() => _overallAging = v),
+                  onRepurchaseChanged: (v) => setState(() => _overallRepurchase = v),
+                  onAgingAdviceChanged: (v) => setState(() => _overallAgingAdvice = v),
+                ),
                 const SizedBox(height: 12),
 
                 // ─── SCORE PREVIEW ───
@@ -1448,124 +1622,10 @@ class _TastingFormScreenState extends State<TastingFormScreen> {
     try {
       final db = DatabaseHelper();
 
-      // 1. Save wine
-      final wineId = await db.insertWine(Wine(
-        name: _nameController.text.trim(),
-        winery: _wineryController.text.isNotEmpty ? _wineryController.text.trim() : null,
-        country: _selectedCountry,
-        region: _selectedRegion,
-        variety: _selectedVariety,
-        vintage: _selectedVintage != null && _selectedVintage != 'NV (无年份)'
-            ? int.tryParse(_selectedVintage!)
-            : null,
-        alcohol: double.tryParse(_alcoholController.text),
-        price: double.tryParse(_priceController.text),
-        wineType: widget.wineType,
-        photoPath: null,
-        createdAt: DateTime.now(),
-        isDeleted: 0,
-      ));
-
-      // 2. Save tasting
-      final tasting = Tasting(
-        wineId: wineId,
-        scoringMode: _scoringMode,
-        isBlind: _isBlind ? 1 : 0,
-        isRevealed: _isBlind ? 0 : 1,
-        drinkingDate: _drinkingDate,
-        purchaseDate: _purchaseDate,
-        venue: _venueController.text.isNotEmpty ? _venueController.text.trim() : null,
-        score100: _previewScore?.round(),
-        notes: _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
-        createdAt: DateTime.now(),
-        isDeleted: 0,
-      );
-      final tastingId = await db.insertTasting(tasting);
-
-      // 3. Save appearance scoring
-      if (_appearanceColor != null ||
-          _appearanceClarity != null ||
-          _appearanceIntensity != null ||
-          _appearanceCondition != null) {
-        final appearance = TastingAppearance(
-          tastingId: tastingId,
-          color: _appearanceColor,
-          clarity: _appearanceClarity,
-          intensity: _appearanceIntensity,
-          condition: _appearanceCondition,
-          tears: _appearanceTears,
-          bubbleFineness: _appearanceBubbleFineness,
-          bubblePersistence: _appearanceBubblePersistence,
-        );
-        await db.insertAppearance(appearance);
-      }
-
-      // 4. Save aroma scoring
-      if (_aromaIntensity != null || _aromaCondition != null || _aromaDevelopment != null) {
-        final aroma = TastingAroma(
-          tastingId: tastingId,
-          intensity: _aromaIntensity?.round() ?? 0,
-          complexity: _aromaCondition?.round() ?? 0,
-          persistence: _aromaDevelopment?.round() ?? 0,
-          purity: ((_aromaIntensity ?? 0) + (_aromaCondition ?? 0) + (_aromaDevelopment ?? 0) / 3)
-              .round(),
-          development: null,
-        );
-        await db.insertAroma(aroma);
-      }
-
-      // 5. Save flavor selections
-      if (_selectedFlavors.isNotEmpty) {
-        final flavorIds = _flavors
-            .where((f) => f.id != null && _selectedFlavors.contains(f.name))
-            .map((f) => f.id!)
-            .toList();
-        if (flavorIds.isNotEmpty) {
-          await db.addTastingFlavors(tastingId, flavorIds);
-        }
-      }
-
-      // 6. Save palate scoring
-      if (_palateAcidity != null ||
-          _palateTannin != null ||
-          _palateBody != null ||
-          _palateBalance != null ||
-          _palateComplexity != null ||
-          _palateFinish != null) {
-        final palate = TastingPalate(
-          tastingId: tastingId,
-          acidity: _palateAcidity?.round() ?? 0,
-          tannin: _palateTannin?.round() ?? 0,
-          body: _palateBody?.round() ?? 0,
-          balance: _palateBalance?.round() ?? 0,
-          complexity: _palateComplexity?.round() ?? 0,
-          finishLength: _palateFinish?.round() ?? 0,
-        );
-        await db.insertPalate(palate);
-      }
-
-      // 7. Save overall scoring
-      if (_overallTypicality != null ||
-          _overallEnjoyment != null ||
-          _overallValue != null ||
-          _overallAging != null ||
-          _overallRepurchase != null) {
-        final overall = TastingOverall(
-          tastingId: tastingId,
-          typicality: _overallTypicality?.round() ?? 0,
-          enjoyment: _overallEnjoyment?.round() ?? 0,
-          value: _overallValue?.round() ?? 0,
-          agingPotential: _overallAging?.round() ?? 0,
-          agingAdvice: _overallAgingAdvice,
-          repurchase: _overallRepurchase?.round() ?? 0,
-        );
-        await db.insertOverall(overall);
-      }
-
-      // 8. Save photos as data URLs
-      for (int i = 0; i < _photoFiles.length; i++) {
-        final dataUrl = ImageUtils.bytesToDataUrl(_photoFiles[i]);
-        await db.insertTastingPhoto(tastingId, dataUrl, sortOrder: i);
+      if (_isEditMode) {
+        await _updateExistingTasting(db);
+      } else {
+        await _createNewTasting(db);
       }
 
       if (mounted) {
@@ -1590,6 +1650,191 @@ class _TastingFormScreenState extends State<TastingFormScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _createNewTasting(db) async {
+    // 1. Save wine
+    final wineId = await db.insertWine(Wine(
+      name: _nameController.text.trim(),
+      winery: _wineryController.text.isNotEmpty ? _wineryController.text.trim() : null,
+      country: _selectedCountry,
+      region: _selectedRegion,
+      variety: _selectedVariety,
+      vintage: _selectedVintage != null && _selectedVintage != 'NV (无年份)'
+          ? int.tryParse(_selectedVintage!)
+          : null,
+      alcohol: double.tryParse(_alcoholController.text),
+      price: double.tryParse(_priceController.text),
+      wineType: widget.wineType,
+      photoPath: null,
+      createdAt: DateTime.now(),
+      isDeleted: 0,
+    ));
+
+    // 2. Save tasting
+    final tasting = Tasting(
+      wineId: wineId,
+      scoringMode: _scoringMode,
+      isBlind: _isBlind ? 1 : 0,
+      isRevealed: _isBlind ? 0 : 1,
+      drinkingDate: _drinkingDate,
+      purchaseDate: _purchaseDate,
+      venue: _venueController.text.isNotEmpty ? _venueController.text.trim() : null,
+      score100: _previewScore?.round(),
+      notes: _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
+      createdAt: DateTime.now(),
+      isDeleted: 0,
+    );
+    final tastingId = await db.insertTasting(tasting);
+
+    // 3-6. Save sub-scores
+    await _saveSubScores(db, tastingId);
+
+    // 7. Save photos
+    await _savePhotos(db, tastingId);
+  }
+
+  Future<void> _updateExistingTasting(db) async {
+    final tastingId = widget.tastingId!;
+    final wineId = widget.existingWineId ?? _editingWineId!;
+
+    // 1. Update wine info
+    await db.updateWine(Wine(
+      id: wineId,
+      name: _nameController.text.trim(),
+      winery: _wineryController.text.isNotEmpty ? _wineryController.text.trim() : null,
+      country: _selectedCountry,
+      region: _selectedRegion,
+      variety: _selectedVariety,
+      vintage: _selectedVintage != null && _selectedVintage != 'NV (无年份)'
+          ? int.tryParse(_selectedVintage!)
+          : null,
+      alcohol: double.tryParse(_alcoholController.text),
+      price: double.tryParse(_priceController.text),
+      wineType: widget.wineType,
+      photoPath: null,
+      createdAt: DateTime.now(),
+      isDeleted: 0,
+    ));
+
+    // 2. Update tasting
+    await db.updateTasting(Tasting(
+      id: tastingId,
+      wineId: wineId,
+      scoringMode: _scoringMode,
+      isBlind: _isBlind ? 1 : 0,
+      isRevealed: _isBlind ? 0 : 1,
+      drinkingDate: _drinkingDate,
+      purchaseDate: _purchaseDate,
+      venue: _venueController.text.isNotEmpty ? _venueController.text.trim() : null,
+      score100: _previewScore?.round(),
+      notes: _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
+      createdAt: DateTime.now(),
+      isDeleted: 0,
+    ));
+
+    // 3. Delete old sub-scores and re-insert
+    await db.deleteAppearance(tastingId);
+    await db.deleteAroma(tastingId);
+    await db.deletePalate(tastingId);
+    await db.deleteOverall(tastingId);
+    await db.deleteTastingFlavors(tastingId);
+    await db.deleteTastingPhotos(tastingId);
+
+    // 4-6. Save sub-scores
+    await _saveSubScores(db, tastingId);
+
+    // 7. Save photos
+    await _savePhotos(db, tastingId);
+  }
+
+  Future<void> _saveSubScores(db, int tastingId) async {
+    // Save appearance scoring
+    if (_appearanceColor != null ||
+        _appearanceClarity != null ||
+        _appearanceIntensity != null ||
+        _appearanceCondition != null) {
+      final appearance = TastingAppearance(
+        tastingId: tastingId,
+        color: _appearanceColor,
+        clarity: _appearanceClarity,
+        intensity: _appearanceIntensity,
+        condition: _appearanceCondition,
+        tears: _appearanceTears,
+        bubbleFineness: _appearanceBubbleFineness,
+        bubblePersistence: _appearanceBubblePersistence,
+      );
+      await db.insertAppearance(appearance);
+    }
+
+    // Save aroma scoring
+    if (_aromaIntensity != null || _aromaCondition != null || _aromaDevelopment != null) {
+      final aroma = TastingAroma(
+        tastingId: tastingId,
+        intensity: _aromaIntensity?.round() ?? 0,
+        complexity: _aromaCondition?.round() ?? 0,
+        persistence: _aromaDevelopment?.round() ?? 0,
+        purity: ((_aromaIntensity ?? 0) + (_aromaCondition ?? 0) + (_aromaDevelopment ?? 0) / 3)
+            .round(),
+        development: null,
+      );
+      await db.insertAroma(aroma);
+    }
+
+    // Save flavor selections
+    if (_selectedFlavors.isNotEmpty) {
+      final flavorIds = _flavors
+          .where((f) => f.id != null && _selectedFlavors.contains(f.name))
+          .map((f) => f.id!)
+          .toList();
+      if (flavorIds.isNotEmpty) {
+        await db.addTastingFlavors(tastingId, flavorIds);
+      }
+    }
+
+    // Save palate scoring
+    if (_palateAcidity != null ||
+        _palateTannin != null ||
+        _palateBody != null ||
+        _palateBalance != null ||
+        _palateComplexity != null ||
+        _palateFinish != null) {
+      final palate = TastingPalate(
+        tastingId: tastingId,
+        acidity: _palateAcidity?.round() ?? 0,
+        tannin: _palateTannin?.round() ?? 0,
+        body: _palateBody?.round() ?? 0,
+        balance: _palateBalance?.round() ?? 0,
+        complexity: _palateComplexity?.round() ?? 0,
+        finishLength: _palateFinish?.round() ?? 0,
+      );
+      await db.insertPalate(palate);
+    }
+
+    // Save overall scoring
+    if (_overallTypicality != null ||
+        _overallEnjoyment != null ||
+        _overallValue != null ||
+        _overallAging != null ||
+        _overallRepurchase != null) {
+      final overall = TastingOverall(
+        tastingId: tastingId,
+        typicality: _overallTypicality?.round() ?? 0,
+        enjoyment: _overallEnjoyment?.round() ?? 0,
+        value: _overallValue?.round() ?? 0,
+        agingPotential: _overallAging?.round() ?? 0,
+        agingAdvice: _overallAgingAdvice,
+        repurchase: _overallRepurchase?.round() ?? 0,
+      );
+      await db.insertOverall(overall);
+    }
+  }
+
+  Future<void> _savePhotos(db, int tastingId) async {
+    for (int i = 0; i < _photoFiles.length; i++) {
+      final dataUrl = ImageUtils.bytesToDataUrl(_photoFiles[i]);
+      await db.insertTastingPhoto(tastingId, dataUrl, sortOrder: i);
     }
   }
 }

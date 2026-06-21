@@ -16,7 +16,7 @@ dependencies:
   path_provider: ^2.1.0
   path: ^1.9.0
   provider: ^6.1.0
-  fl_chart: ^0.69.0
+  fl_chart: 0.69.2
   image_picker: ^1.1.0
   image_picker_for_web: ^3.0.0
   image: ^4.2.0

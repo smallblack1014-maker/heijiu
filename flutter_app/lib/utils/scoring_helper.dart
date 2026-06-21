@@ -10,8 +10,9 @@ class ScoringHelper {
   }
 
   // 口感评分 (0-10)
+  // 酸度和单宁为描述性指标（不计入分数），平衡感已涵盖各要素协调性
   static double calcPalateScore(TastingPalate p) {
-    return (p.acidity + p.tannin + p.body + p.balance + p.complexity + p.finishLength) / 6.0;
+    return (p.body + p.balance + p.complexity + p.finishLength) / 4.0;
   }
 
   // 综合评分 (0-10)

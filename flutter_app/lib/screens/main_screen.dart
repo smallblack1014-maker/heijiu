@@ -35,11 +35,11 @@ class _MainScreenState extends State<MainScreen> {
             unselectedItemColor: AppTheme.textSecondary,
             items: const [
               BottomNavigationBarItem(
-                icon: Icon(Icons.local_bar),
+                icon: Icon(Icons.edit_note),
                 label: '品鉴',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.local_bar),
+                icon: Icon(Icons.wine_bar),
                 label: '酒款',
               ),
               BottomNavigationBarItem(

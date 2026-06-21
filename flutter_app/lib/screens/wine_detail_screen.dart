@@ -1,5 +1,8 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:share_plus/share_plus.dart' as share;
 import '../database/database_helper.dart';
 import '../utils/image_utils.dart';
 import '../models/wine.dart';
@@ -13,6 +16,9 @@ import '../utils/wine_type_helper.dart';
 import 'wine_archive_screen.dart';
 import 'cellar_add_screen.dart';
 import 'tasting_form_screen.dart';
+import '../widgets/palate_radar_chart.dart';
+import '../widgets/score_trend_chart.dart';
+import '../widgets/tasting_share_card.dart';
 
 class WineDetailScreen extends StatefulWidget {
   final Wine wine;
@@ -209,6 +215,21 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
             ),
             const SizedBox(height: 16),
 
+            // 评分趋势图（多个品鉴记录时显示）
+            if (_tastings.length >= 2) ...[
+              _buildSectionTitle('评分趋势', icon: Icons.trending_up),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ScoreTrendChart(
+                    points: ScoreTrendData.fromTastingMaps(_tastings),
+                    height: 180,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // 酒款照片聚合（来自所有品鉴记录）
             if (_allPhotos.isNotEmpty) ...[const SizedBox(height: 16)],
             if (_allPhotos.isNotEmpty)
@@ -264,7 +285,9 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
             else
               ..._tastings.map((t) => _TastingRecordCard(
                 data: t,
+                wine: wine,
                 isExpanded: _expandedTastingId == (t['tasting'] as Tasting).id,
+                wineType: wine.wineType,
                 onToggle: () {
                   final tid = (t['tasting'] as Tasting).id;
                   setState(() {
@@ -292,16 +315,49 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
       ),
     );
   }
+
+  /// Build a section title with optional icon
+  Widget _buildSectionTitle(String title, {IconData? icon}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: AppTheme.wineRed,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (icon != null) ...[Icon(icon, size: 18, color: AppTheme.wineRed), const SizedBox(width: 6)],
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _TastingRecordCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final bool isExpanded;
+  final String wineType;
+  final Wine wine;
   final VoidCallback onToggle;
 
   const _TastingRecordCard({
     required this.data,
     required this.isExpanded,
+    required this.wineType,
+    required this.wine,
     required this.onToggle,
   });
 
@@ -430,6 +486,43 @@ class _TastingRecordCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(tasting.notes!, style: const TextStyle(fontSize: 13, height: 1.4)),
                   ),
+                if (palate != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Center(
+                      child: PalateRadarChart(palate: palate, size: 160, wineType: wineType),
+                    ),
+                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.share, size: 20),
+                      tooltip: '分享品鉴卡',
+                      onPressed: () => _showShareCard(context, data),
+                      color: AppTheme.wineRed,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 20),
+                      tooltip: '编辑',
+                      onPressed: () {
+                        final tasting = data['tasting'] as Tasting;
+                        final wineType = data['wineType'] as String? ?? 'red';
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TastingFormScreen(
+                              wineType: wineType,
+                              tastingId: tasting.id,
+                              existingWineId: tasting.wineId,
+                            ),
+                          ),
+                        );
+                      },
+                      color: AppTheme.wineRed,
+                    ),
+                  ],
+                ),
               ],
             ],
           ),
@@ -445,13 +538,119 @@ class _TastingRecordCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 40,
-            child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            width: 48,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
           ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
+  }
+
+  // ─── Share Card ───
+
+  void _showShareCard(BuildContext context, Map<String, dynamic> data) {
+    final tasting = data['tasting'] as Tasting;
+    final appearance = data['appearance'] as TastingAppearance?;
+    final aroma = data['aroma'] as TastingAroma?;
+    final palate = data['palate'] as TastingPalate?;
+    final overall = data['overall'] as TastingOverall?;
+    final flavors = (data['flavors'] as List<dynamic>).cast<String>();
+
+    final shareKey = GlobalKey();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TastingShareCard(
+              wine: wine,
+              tasting: tasting,
+              appearance: appearance,
+              aroma: aroma,
+              palate: palate,
+              overall: overall,
+              flavors: flavors,
+              repaintKey: shareKey,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                // Delay to let dialog close, then capture and share
+                await Future.delayed(const Duration(milliseconds: 100));
+                _captureAndShare(context, shareKey);
+              },
+              icon: const Icon(Icons.share),
+              label: const Text('分享图片'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.wineRed,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _captureAndShare(BuildContext context, GlobalKey repaintKey) async {
+    try {
+      // We need to render off-screen to capture the card.
+      // Since the dialog is already closed, we'll build a new overlay.
+      final overlayEntry = OverlayEntry(
+        builder: (_) => Material(
+          color: Colors.black54,
+          child: Center(
+            child: RepaintBoundary(
+              key: repaintKey,
+              child: TastingShareCard(
+                wine: wine,
+                tasting: Tasting(wineId: wine.id ?? 0, score100: 0), // placeholder, real data set below
+                repaintKey: repaintKey,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Simpler approach: show a brief overlay, capture, then remove
+      final overlay = Overlay.of(context);
+      overlay.insert(overlayEntry);
+
+      // Allow frame to render
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        overlayEntry.remove();
+        return;
+      }
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData?.buffer.asUint8List();
+
+      overlayEntry.remove();
+
+      if (bytes != null) {
+        await share.Share.shareXFiles(
+          [share.XFile.fromData(bytes, name: '${wine.name}_品鉴卡.png')],
+          text: '来自黑酒的品鉴记录',
+        );
+      }
+    } catch (e) {
+      debugPrint('Share error: $e');
+    }
   }
 }
 

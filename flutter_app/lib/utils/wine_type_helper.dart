@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class WineTypeHelper {
   static String getLabel(String type) {
@@ -44,9 +44,9 @@ class WineTypeHelper {
       case 'rose':
         return Icons.wine_bar;
       case 'sparkling':
-        return Icons.wine_bar;
+        return Icons.emoji_events;
       case 'sweet':
-        return Icons.wine_bar;
+        return Icons.cake;
       default:
         return Icons.wine_bar;
     }
@@ -99,6 +99,10 @@ class WineTypeHelper {
 
   static List<String> getTearsOptions() {
     return ['无挂杯', '稀疏挂杯', '中等挂杯', '密集挂杯', '厚重挂杯'];
+  }
+
+  static bool isTanninRelevant(String type) {
+    return type == 'red';
   }
 
   static List<String> getBubbleFinenessOptions() {

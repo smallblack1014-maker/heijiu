@@ -1083,6 +1083,50 @@ class DatabaseHelper {
     await db.delete('tasting_photos', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<void> deleteTastingPhotos(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_photos', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  // ==================== Delete Methods (for edit mode) ====================
+
+  Future<void> deleteAppearance(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_appearance', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  Future<void> deleteAroma(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_aroma', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  Future<void> deletePalate(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_palate', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  Future<void> deleteOverall(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_overall', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  Future<void> deleteTastingFlavors(int tastingId) async {
+    final db = await database;
+    await db.delete('tasting_flavors', where: 'tastingId = ?', whereArgs: [tastingId]);
+  }
+
+  Future<Wine?> findWineByName(String name) async {
+    final db = await database;
+    final maps = await db.query(
+      'wines',
+      where: 'name = ? AND isDeleted = 0',
+      whereArgs: [name],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Wine.fromMap(maps.first);
+  }
+
   // ==================== 搜索 ====================
 
   Future<List<Wine>> searchWines(String query) async {
